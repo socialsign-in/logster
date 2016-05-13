@@ -44,6 +44,10 @@ class NginxLogster(LogsterParser):
         self.http_3xx = 0
         self.http_4xx = 0
         self.http_5xx = 0
+        self.http_all = 0
+        self.http_time_all = 0
+        self.slow_reqs = 0
+
         self.start_time = None
         self.end_time = None
        
@@ -77,7 +81,8 @@ class NginxLogster(LogsterParser):
                 if not self.start_time:
                     self.start_time = linebits[2] 
                 self.end_time = linebits[2] 
-                status = int(linebits[nginx_cols.index('status')])
+                status = int(linebits[4])
+                access_time_ms = float(linebits[8]) * 1000
 
                 if (status < 200):
                     self.http_1xx += 1
@@ -89,6 +94,10 @@ class NginxLogster(LogsterParser):
                     self.http_4xx += 1
                 else:
                     self.http_5xx += 1
+                self.http_all += 1
+                self.http_time_all += access_time_ms
+                if access_time_ms > 700:
+                    self.slow_reqs += 1
 
             else:
                 raise LogsterParsingException("regmatch failed to match")
@@ -126,11 +135,21 @@ class NginxLogster(LogsterParser):
         if not duration:
             duration = 1 
 
+        if not self.http_all:
+            return []
+
         # Return a list of metrics objects
         return [
-            MetricObject("http_1xx", (self.http_1xx / duration), "Responses per sec"),
-            MetricObject("http_2xx", (self.http_2xx / duration), "Responses per sec"),
-            MetricObject("http_3xx", (self.http_3xx / duration), "Responses per sec"),
-            MetricObject("http_4xx", (self.http_4xx / duration), "Responses per sec"),
-            MetricObject("http_5xx", (self.http_5xx / duration), "Responses per sec"),
+            #MetricObject("http_1xx", (self.http_1xx / duration), "Responses per sec"),
+            #MetricObject("http_2xx", (self.http_2xx / duration), "Responses per sec"),
+            #MetricObject("http_3xx", (self.http_3xx / duration), "Responses per sec"),
+            #MetricObject("http_4xx", (self.http_4xx / duration), "Responses per sec"),
+            MetricObject("http_badreqs",  (self.http_4xx + self.http_5xx)/self.http_all, "% Bad Requests"),
+            MetricObject("http_slowreqs",  self.slow_reqs/self.http_all, "% Slow Requests"),
+            MetricObject("http_numreqs",  self.http_all, "Http Requests"),
+            MetricObject("http_reqs",  self.http_time_all/self.http_all, "Request Time (ms)"),
+            #MetricObject("http_2xx", (self.http_2xx / duration), "Responses per sec"),
+            #MetricObject("http_3xx", (self.http_3xx / duration), "Responses per sec"),
+            #MetricObject("http_4xx", (self.http_4xx / duration), "Responses per sec"),
+            #MetricObject("http_5xx", (self.http_5xx / duration), "Responses per sec"),
         ]
